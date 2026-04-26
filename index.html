@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>To-Do Lists</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #020817; font-family: 'Courier New', monospace; }
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: #0F172A; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+input, textarea { outline: none; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+const TABS = [
+  { id: "daily",   label: "DAILY",   color: "#3B82F6", emoji: "", desc: "Today's tasks" },
+  { id: "weekly",  label: "WEEKLY",  color: "#10B981", emoji: "", desc: "This week" },
+  { id: "monthly", label: "MONTHLY", color: "#D4A017", emoji: "", desc: "This month" },
+]
+
+const CATEGORIES = [
+  { id: "all",      label: "ALL",      color: "#64748b", emoji: "" },
+  { id: "work",     label: "WORK",     color: "#3B82F6", emoji: "" },
+  { id: "admin",    label: "ADMIN",    color: "#10B981", emoji: "" },
+  { id: "personal", label: "PERSONAL", color: "#D4A017", emoji: "" },
+]
+
+function load(key, def) {
+  try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(def)) } catch { return def }
+}
+function save(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)) } catch {}
+}
+
+let nextId = Date.now()
+const uid = () => String(++nextId)
+
+function TodoItem({ item, catColor, onToggle, onDelete, showCatBadge, catLabel, catEmoji }) {
+  const [expanded, setExpanded] = useState(false)
+  const [editNote, setEditNote] = useState(false)
+  const [note, setNote] = useState(item.note || "")
+
+  const saveNote = (val) => {
+    setNote(val)
+    onToggle(item.id, "note", val)
+    setEditNote(false)
+  }
+
+  const isLink = (text) => {
+    try { new URL(text); return true } catch { return false }
+  }
+
+  return (
+    <div style={{ marginBottom: 5, borderRadius: 9, overflow: "hidden", border: `1px solid ${item.done ? "#0F172A" : "#1E293B"}`, opacity: item.done ? 0.5 : 1 }}>
+      {/* Main row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: item.done ? "#0a0f1a" : "#0c1524" }}>
+        <div onClick={() => onToggle(item.id, "done")}
+          style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${item.done ? catColor : "#475569"}`, background: item.done ? catColor : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: "pointer" }}>
+          {item.done && <span style={{ color: "#fff", fontSize: 11, fontWeight: 900 }}>✓</span>}
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            {showCatBadge && (
+              <span style={{ fontSize: 8, background: `${catColor}22`, color: catColor, padding: "1px 5px", borderRadius: 3, fontWeight: 700, flexShrink: 0 }}>
+                {catEmoji} {catLabel}
+              </span>
+            )}
+            <span onClick={() => onToggle(item.id, "done")} style={{ fontSize: 12, color: item.done ? "#475569" : "#cbd5e1", textDecoration: item.done ? "line-through" : "none", cursor: "pointer", wordBreak: "break-word" }}>{item.text}</span>
+          </div>
+          {item.note && !expanded && (
+            <div onClick={() => setExpanded(true)} style={{ fontSize: 9.5, color: "#64748b", marginTop: 3, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              📎 {item.note}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+          <button onClick={() => { setExpanded(!expanded); setEditNote(false) }}
+            style={{ background: expanded ? "#1E293B" : "transparent", border: `1px solid ${expanded ? "#334155" : "transparent"}`, color: expanded ? "#94a3b8" : "#334155", cursor: "pointer", fontSize: 11, padding: "2px 6px", borderRadius: 4, fontFamily: "inherit" }}>
+            {expanded ? "▲" : "▼"}
+          </button>
+          <button onClick={() => onDelete(item.id)}
+            style={{ background: "transparent", border: "1px solid transparent", color: "#334155", cursor: "pointer", fontSize: 12, padding: "2px 6px", fontFamily: "inherit" }}>✕</button>
+        </div>
+      </div>
+
+      {/* Expanded note panel */}
+      {expanded && (
+        <div style={{ padding: "8px 12px 10px", background: "#080f1e", borderTop: "1px solid #1E293B" }}>
+          {editNote ? (
+            <div>
+              <textarea
+                defaultValue={note}
+                autoFocus
+                onBlur={e => saveNote(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveNote(e.target.value) } }}
+                placeholder="Add note, phone number, link..."
+                style={{ width: "100%", background: "#1E293B", border: `1px solid ${catColor}`, borderRadius: 6, color: "#f1f5f9", padding: "7px 10px", fontSize: 11, fontFamily: "inherit", resize: "none", height: 70 }}
+              />
+              <div style={{ fontSize: 8.5, color: "#334155", marginTop: 3 }}>Enter to save · Shift+Enter for new line</div>
+            </div>
+          ) : (
+            <div>
+              {note ? (
+                <div onClick={() => setEditNote(true)} style={{ cursor: "pointer" }}>
+                  {isLink(note) ? (
+                    <a href={note} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: catColor, wordBreak: "break-all" }} onClick={e => e.stopPropagation()}>🔗 {note}</a>
+                  ) : (
+                    <div style={{ fontSize: 11, color: "#94a3b8", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{note}</div>
+                  )}
+                  <div style={{ fontSize: 8.5, color: "#334155", marginTop: 4 }}>Tap to edit</div>
+                </div>
+              ) : (
+                <button onClick={() => setEditNote(true)}
+                  style={{ background: "transparent", border: `1px dashed #334155`, color: "#475569", padding: "6px 12px", borderRadius: 6, cursor: "pointer", fontSize: 10, fontFamily: "inherit", width: "100%" }}>
+                  + Add note, number or link
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function App() {
+  const [activeTab, setActiveTab] = useState("daily")
+  const [activeCategory, setActiveCategory] = useState("all")
+  const [todos, setTodos] = useState(() => load("td_todos_v2", {}))
+  const [input, setInput] = useState("")
+  const [addCategory, setAddCategory] = useState("work")
+  const inputRef = useRef(null)
+
+  useEffect(() => { save("td_todos_v2", todos) }, [todos])
+
+  const tab = TABS.find(t => t.id === activeTab)
+  const cat = CATEGORIES.find(c => c.id === activeCategory)
+
+  // Get items for display
+  const getItems = (tabId, catId) => todos[`${tabId}_${catId}`] || []
+
+  const allItems = activeCategory === "all"
+    ? ["work", "admin", "personal"].flatMap(cId =>
+        getItems(activeTab, cId).map(i => ({ ...i, _catId: cId }))
+      ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+    : getItems(activeTab, activeCategory)
+
+  const pending = allItems.filter(i => !i.done)
+  const done = allItems.filter(i => i.done)
+
+  const addTodo = () => {
+    const text = input.trim()
+    if (!text) return
+    const catId = activeCategory === "all" ? addCategory : activeCategory
+    const key = `${activeTab}_${catId}`
+    setTodos(prev => ({
+      ...prev,
+      [key]: [...(prev[key] || []), { id: uid(), text, done: false, note: "", createdAt: new Date().toISOString() }]
+    }))
+    setInput("")
+    inputRef.current?.focus()
+  }
+
+  const toggleTodo = (catId, id, field, val) => {
+    const key = `${activeTab}_${catId}`
+    setTodos(prev => ({
+      ...prev,
+      [key]: (prev[key] || []).map(i => {
+        if (i.id !== id) return i
+        if (field === "done") return { ...i, done: !i.done }
+        if (field === "note") return { ...i, note: val }
+        return i
+      })
+    }))
+  }
+
+  const deleteTodo = (catId, id) => {
+    const key = `${activeTab}_${catId}`
+    setTodos(prev => ({ ...prev, [key]: (prev[key] || []).filter(i => i.id !== id) }))
+  }
+
+  const clearDone = () => {
+    if (!done.length) return
+    if (!confirm(`Clear ${done.length} completed task${done.length > 1 ? "s" : ""}?`)) return
+    const catIds = activeCategory === "all" ? ["work", "admin", "personal"] : [activeCategory]
+    setTodos(prev => {
+      const next = { ...prev }
+      catIds.forEach(cId => {
+        const key = `${activeTab}_${cId}`
+        next[key] = (next[key] || []).filter(i => !i.done)
+      })
+      return next
+    })
+  }
+
+  const tabTotalPending = (tabId) =>
+    ["work","admin","personal"].reduce((a, c) => a + (todos[`${tabId}_${c}`] || []).filter(i => !i.done).length, 0)
+
+  const catPending = (catId) => {
+    if (catId === "all") return tabTotalPending(activeTab)
+    return (todos[`${activeTab}_${catId}`] || []).filter(i => !i.done).length
+  }
+
+  const currentAddCat = activeCategory === "all"
+    ? CATEGORIES.find(c => c.id === addCategory)
+    : cat
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#020817", color: "#f1f5f9", display: "flex", flexDirection: "column" }}>
+      <div style={{ maxWidth: 520, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+
+        {/* Header */}
+        <div style={{ padding: "14px 14px 0", background: "#030d1c", borderBottom: "1px solid #0F172A" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 9, color: "#D4A017", letterSpacing: "0.2em", textTransform: "uppercase", fontWeight: 700 }}>● DAILY SYSTEM</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: "#f8fafc" }}>To-Do Lists</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#D4A017" }}>
+                {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short", year: "numeric" })}
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: tab.color, marginTop: 1 }}>{tabTotalPending(activeTab)} pending</div>
+            </div>
+          </div>
+
+          {/* Period tabs — with visual period indicator */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 0 }}>
+            {TABS.map(t => {
+              const p = tabTotalPending(t.id)
+              const active = activeTab === t.id
+              return (
+                <button key={t.id} onClick={() => setActiveTab(t.id)}
+                  style={{ flex: 1, padding: "8px 4px", background: active ? `${t.color}15` : "transparent", border: `1px solid ${active ? t.color : "#1E293B"}`, borderBottom: active ? `3px solid ${t.color}` : "1px solid #1E293B", borderRadius: "6px 6px 0 0", color: active ? t.color : "#475569", cursor: "pointer", fontFamily: "inherit", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, fontWeight: 800 }}>{t.label}</div>
+                  <div style={{ fontSize: 8, color: active ? t.color : "#334155", marginTop: 1 }}>{t.desc}</div>
+                  {p > 0 && <div style={{ fontSize: 9, fontWeight: 900, color: t.color, marginTop: 2 }}>{p} pending</div>}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Category tabs */}
+        <div style={{ display: "flex", background: "#050e1c", borderBottom: "2px solid #1E293B" }}>
+          {CATEGORIES.map(c => {
+            const p = catPending(c.id)
+            const active = activeCategory === c.id
+            return (
+              <button key={c.id} onClick={() => setActiveCategory(c.id)}
+                style={{ flex: 1, padding: "7px 2px", background: active ? "#0c1524" : "transparent", border: "none", borderBottom: active ? `2px solid ${c.color}` : "2px solid transparent", color: active ? c.color : "#475569", cursor: "pointer", fontFamily: "inherit", fontSize: 10, fontWeight: 700 }}>
+                {c.label}
+                {p > 0 && <span style={{ marginLeft: 4, fontSize: 8, background: `${c.color}22`, color: c.color, padding: "1px 4px", borderRadius: 3 }}>{p}</span>}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Add input — hidden on All tab */}
+        {activeCategory !== "all" && (
+        <div style={{ padding: "10px 12px", background: "#0c1524", borderBottom: "1px solid #1E293B" }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              ref={inputRef}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && addTodo()}
+              placeholder={`Add ${currentAddCat.label.toLowerCase()} task for ${tab.label.toLowerCase()}...`}
+              style={{ flex: 1, background: "#1E293B", border: `1px solid #334155`, borderRadius: 7, color: "#f1f5f9", padding: "9px 12px", fontSize: 11, fontFamily: "inherit" }}
+            />
+            <button onClick={addTodo}
+              style={{ background: currentAddCat.color, border: "none", color: "#fff", borderRadius: 7, padding: "9px 16px", cursor: "pointer", fontSize: 16, fontWeight: 900 }}>+</button>
+          </div>
+        </div>
+        )}
+
+
+        {/* List */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px" }}>
+
+          {allItems.length === 0 && (
+            <div style={{ textAlign: "center", color: "#334155", padding: "40px 0", fontSize: 12 }}>
+              No tasks yet
+            </div>
+          )}
+
+          {pending.map(item => {
+            const catId = item._catId || activeCategory
+            const c = CATEGORIES.find(x => x.id === catId)
+            return (
+              <TodoItem
+                key={item.id}
+                item={item}
+                catColor={c.color}
+                showCatBadge={activeCategory === "all"}
+                catLabel={c.label}
+                catEmoji={c.emoji}
+                onToggle={(id, field, val) => toggleTodo(catId, id, field, val)}
+                onDelete={(id) => deleteTodo(catId, id)}
+              />
+            )
+          })}
+
+          {done.length > 0 && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "14px 0 6px", padding: "6px 10px", background: "#0c1524", borderRadius: 6, border: "1px solid #1E293B" }}>
+                <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>✓ Completed ({done.length})</div>
+                <button onClick={clearDone}
+                  style={{ background: "#EF444422", border: "1px solid #EF4444", color: "#EF4444", cursor: "pointer", fontSize: 9, fontFamily: "inherit", padding: "3px 10px", borderRadius: 4, fontWeight: 700 }}>Clear all</button>
+              </div>
+              {done.map(item => {
+                const catId = item._catId || activeCategory
+                const c = CATEGORIES.find(x => x.id === catId)
+                return (
+                  <TodoItem
+                    key={item.id}
+                    item={item}
+                    catColor={c.color}
+                    showCatBadge={activeCategory === "all"}
+                    catLabel={c.label}
+                    catEmoji={c.emoji}
+                    onToggle={(id, field, val) => toggleTodo(catId, id, field, val)}
+                    onDelete={(id) => deleteTodo(catId, id)}
+                  />
+                )
+              })}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: "8px 12px", background: "#030d1c", borderTop: "1px solid #1E293B", display: "flex", justifyContent: "space-between" }}>
+          <div style={{ fontSize: 8.5, color: "#334155" }}>Incomplete tasks carry forward automatically</div>
+          <div style={{ fontSize: 9, color: "#475569", fontWeight: 700 }}>{pending.length} left</div>
+        </div>
+
+      </div>
+    </div>
+  )
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />)
+</script>
+</body>
+</html>
